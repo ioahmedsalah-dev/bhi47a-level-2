@@ -54,7 +54,7 @@ const AdminDashboard = () => {
                 <img 
                   src="/logo.webp" 
                   alt="Institute Logo" 
-                  className="relative w-20 h-20 md:w-[100px] md:h-[100px] object-contain drop-shadow-2xl"
+                  className="relative w-20 h-20 md:w-36 md:h-36 object-contain drop-shadow-2xl"
                 />
                 <div className="absolute -inset-4 bg-primary/20 blur-3xl rounded-full -z-10" />
               </div>

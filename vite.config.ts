@@ -63,7 +63,7 @@ export default defineConfig(({ mode }) => ({
           supabase: ["@supabase/supabase-js"],
           xlsx: ["xlsx"],
           charts: ["recharts"],
-          forms: ["react-hook-form", "zod", "@hookform/resolvers"],
+          // forms merged into main/consuming chunks for better critical path
         },
       },
     },

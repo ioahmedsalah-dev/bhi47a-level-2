@@ -4,11 +4,11 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index"; // Eager load the landing page
+import Index from "./pages/Index";
+import StudentLogin from "./pages/StudentLogin"; // Eager load critical path
 
 // Lazy load other pages for code splitting
 const NotFound = lazy(() => import("./pages/NotFound"));
-const StudentLogin = lazy(() => import("./pages/StudentLogin"));
 const Grades = lazy(() => import("./pages/Grades"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
@@ -44,11 +44,7 @@ const App = () => (
           />
           <Route
             path="/student/login"
-            element={
-              <Suspense fallback={<LoadingFallback />}>
-                <StudentLogin />
-              </Suspense>
-            }
+            element={<StudentLogin />}
           />
           <Route
             path="/grades"
