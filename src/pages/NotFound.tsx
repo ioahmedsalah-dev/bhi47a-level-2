@@ -21,7 +21,7 @@ const NotFound = () => {
       <Card className="w-full max-w-md bg-card/95 backdrop-blur-sm border-border shadow-[var(--shadow-glow)] p-8">
         <div className="flex flex-col items-center gap-6 text-center">
           <img
-            src="/logo.webp" 
+            src="/logo.pngp" 
             alt="Institute Logo" 
             className="w-32 h-32 object-contain rounded-full shadow-[var(--shadow-glow)]"
           />

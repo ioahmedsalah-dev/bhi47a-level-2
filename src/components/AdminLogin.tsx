@@ -181,7 +181,7 @@ export const AdminLogin = () => {
           </Button>
 
           <img 
-            src="/logo.webp" 
+            src="/logo.pngp" 
             alt="Institute Logo" 
             className="w-24 h-24 md:w-36 md:h-36 object-contain rounded-full shadow-[var(--shadow-glow)]"
             fetchPriority="high"

@@ -84,7 +84,7 @@ export const StudentLogin = () => {
             المعهد العالى للعلوم الادارية المتقدمة والحاسبات
           </h1>
           <img
-            src="/logo.webp" 
+            src="/logo.pngp" 
             alt="Institute Logo"
             width={144}
             height={144}

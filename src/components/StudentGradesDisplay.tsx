@@ -104,7 +104,7 @@ export const StudentGradesDisplay = () => {
           المعهد العالى للعلوم الادارية المتقدمة والحاسبات
           </h1>
           <img 
-            src="/logo.webp" 
+            src="/logo.pngp" 
             alt="institute Logo"
             width={128}
             height={128}

@@ -52,7 +52,7 @@ const AdminDashboard = () => {
             <div className="flex flex-col md:flex-row items-center gap-6">
               <div className="relative">
                 <img 
-                  src="/logo.webp" 
+                  src="/logo.pngp" 
                   alt="Institute Logo" 
                   className="relative w-20 h-20 md:w-36 md:h-36 object-contain drop-shadow-2xl"
                 />

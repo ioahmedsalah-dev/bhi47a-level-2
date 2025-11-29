@@ -14,7 +14,7 @@ export const Welcome = () => {
       <div className="flex flex-col items-center gap-8 w-full max-w-2xl">
         <div className="flex flex-col items-center gap-4">
           <img 
-            src="/logo.webp" 
+            src="/logo.pngp" 
             alt="Institute Logo"
             width={144}
             height={144}
