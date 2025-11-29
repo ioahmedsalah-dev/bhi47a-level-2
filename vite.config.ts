@@ -61,7 +61,6 @@ export default defineConfig(({ mode }) => ({
           react: ["react", "react-dom", "react-router-dom"],
           query: ["@tanstack/react-query"],
           supabase: ["@supabase/supabase-js"],
-          xlsx: ["xlsx"],
           charts: ["recharts"],
           // forms merged into main/consuming chunks for better critical path
         },

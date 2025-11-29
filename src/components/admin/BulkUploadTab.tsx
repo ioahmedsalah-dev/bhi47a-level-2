@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import * as XLSX from 'xlsx';
+import readXlsxFile from 'read-excel-file';
 import { supabase } from "@/integrations/supabase/client";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -60,19 +60,13 @@ const BulkUploadTab = () => {
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
-    if (selectedFile && (selectedFile.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || selectedFile.name.endsWith('.xlsx') || selectedFile.name.endsWith('.xls'))) {
+    if (selectedFile && (selectedFile.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || selectedFile.name.endsWith('.xlsx'))) {
       setFile(selectedFile);
       
       // Preview the data
       try {
-        const data = await selectedFile.arrayBuffer();
-        const workbook = XLSX.read(data);
-        console.log('Workbook sheets:', workbook.SheetNames);
-        const sheetName = workbook.SheetNames[0];
-        console.log('Using sheet:', sheetName);
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        const dataRows = jsonData.slice(1) as (string | number)[][];
+        const rows = await readXlsxFile(selectedFile);
+        const dataRows = rows.slice(1) as (string | number)[][];
         
         const previewData: { student_code: string; student_name: string; national_id?: string; grade?: number; status?: string; isValid: boolean; error?: string }[] = [];
         const seenRecords = new Set<string>();
@@ -182,7 +176,7 @@ const BulkUploadTab = () => {
     } else {
       toast({
         title: "خطأ",
-        description: "الرجاء اختيار ملف Excel صحيح (.xlsx أو .xls)",
+        description: "الرجاء اختيار ملف Excel صحيح (.xlsx)",
         variant: "destructive",
       });
       setFile(null);
@@ -218,19 +212,9 @@ const BulkUploadTab = () => {
         throw new Error('المادة المختارة غير متاحة');
       }
 
-      const data = await file.arrayBuffer();
-      console.log('File loaded, size:', data.byteLength);
-
-      const workbook = XLSX.read(data);
-      console.log('Workbook sheets:', workbook.SheetNames);
-      const sheetName = workbook.SheetNames[0];
-      console.log('Using sheet:', sheetName);
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-      console.log('Raw data:', jsonData);
-
+      const rows = await readXlsxFile(file);
       // Skip header row and process data
-      const dataRows = jsonData.slice(1) as (string | number)[][];
+      const dataRows = rows.slice(1) as (string | number)[][];
       console.log('Data rows:', dataRows);
 
       // Expected columns: 0: student_code, 1: student_name, 2: national_id (optional/mandatory), 3: grade, 4: status (optional)
@@ -581,7 +565,7 @@ const BulkUploadTab = () => {
                 id="excel-file"
                 ref={fileInputRef}
                 type="file"
-                accept=".xlsx,.xls"
+                accept=".xlsx"
                 onChange={handleFileChange}
                 className="mt-2 cursor-pointer text-left"
                 dir="ltr"
