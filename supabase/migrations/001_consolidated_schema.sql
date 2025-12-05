@@ -187,7 +187,21 @@ BEGIN
 END;
 $$;
 
--- 4. INITIAL DATA
+
+
+-- 4. add status column to grades table
+-- Add status column to grades table
+ALTER TABLE public.grades ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'present';
+
+-- Add constraint for status values
+ALTER TABLE public.grades DROP CONSTRAINT IF EXISTS grades_status_check;
+ALTER TABLE public.grades ADD CONSTRAINT grades_status_check CHECK (status IN ('present', 'absent', 'banned'));
+
+-- Update existing records to have 'present' status if null
+UPDATE public.grades SET status = 'present' WHERE status IS NULL;
+
+
+-- 5. INITIAL DATA
 -- ============================================================
 INSERT INTO public.admins (admin_code, admin_name, password_hash, role)
 VALUES 

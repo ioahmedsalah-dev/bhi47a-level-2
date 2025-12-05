@@ -8,9 +8,10 @@ import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import readXlsxFile from 'read-excel-file';
 import { supabase } from "@/integrations/supabase/client";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Loader2, CheckCircle2, Download ,Upload } from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { getAdminSession, logAdminAction } from "@/integrations/supabase/auth";
+import { Progress } from "@/components/ui/progress";
 
 
 interface ExcelRow {
@@ -24,6 +25,8 @@ interface ExcelRow {
 const BulkUploadTab = () => {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState("");
   const [preview, setPreview] = useState<{ student_code: string; student_name: string; national_id?: string; grade?: number; status?: string; isValid: boolean; error?: string }[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -199,6 +202,9 @@ const BulkUploadTab = () => {
     }
 
     setLoading(true);
+    setUploadProgress(0);
+    setUploadStatus("جاري قراءة الملف...");
+    
     try {
       console.log('Starting file processing...');
 
@@ -213,6 +219,9 @@ const BulkUploadTab = () => {
       }
 
       const rows = await readXlsxFile(file);
+      setUploadProgress(10);
+      setUploadStatus("جاري التحقق من البيانات...");
+      
       // Skip header row and process data
       const dataRows = rows.slice(1) as (string | number)[][];
       console.log('Data rows:', dataRows);
@@ -223,11 +232,16 @@ const BulkUploadTab = () => {
       const seenRecords = new Set<string>();
       const seenNationalIds = new Set<string>();
 
-      for (let index = 0; index < dataRows.length; index++) {
+      const totalRows = dataRows.length;
+      
+      for (let index = 0; index < totalRows; index++) {
+        // Update progress during validation loop (10% to 30%)
+        if (index % 50 === 0) {
+           setUploadProgress(10 + Math.round((index / totalRows) * 20));
+        }
+
         const row = dataRows[index];
         const rowNumber = index + 2; // +1 for header, +1 for human-readable (not 0-indexed)
-        
-        console.log(`Processing row ${rowNumber}:`, row);
         
         // Check if all first two columns exist (student_code, student_name)
         if (!row[0] || !row[1]) {
@@ -303,20 +317,16 @@ const BulkUploadTab = () => {
         });
       }
 
-      console.log('Processed data:', processedData);
-      console.log('Invalid rows:', invalidRows);
-
-      // If there are any errors, show them and prevent upload
       if (invalidRows.length > 0) {
-        const errorMessage = invalidRows.slice(0, 5).join('\n');
-        const totalErrors = invalidRows.length;
-        const errorSuffix = totalErrors > 5 ? `\n... و ${totalErrors - 5} أخطاء أخرى` : '';
-        throw new Error(`وجدت أخطاء في البيانات:\n${errorMessage}${errorSuffix}`);
+        throw new Error(`وجدنا أخطاء في الملف:\n${invalidRows.slice(0, 5).join('\n')}${invalidRows.length > 5 ? `\n...و ${invalidRows.length - 5} أخطاء أخرى` : ''}`);
       }
 
       if (processedData.length === 0) {
         throw new Error("لا توجد بيانات صحيحة في الملف");
       }
+
+      setUploadProgress(35);
+      setUploadStatus("جاري تحديث بيانات الطلاب...");
 
       // Upsert students (insert new or update existing)
       const studentsToUpsert = processedData.map(row => ({ 
@@ -326,59 +336,81 @@ const BulkUploadTab = () => {
         status: row.status
       }));
 
-      console.log('Students to upsert:', studentsToUpsert);
-
       if (studentsToUpsert.length > 0) {
-        const { error: studentError } = await supabase
-          .from('students')
-          .upsert(studentsToUpsert, { onConflict: 'student_code' });
+        // Split into chunks of 100 to show progress and avoid timeouts
+        const chunkSize = 100;
+        for (let i = 0; i < studentsToUpsert.length; i += chunkSize) {
+          const chunk = studentsToUpsert.slice(i, i + chunkSize);
+          const { error: studentError } = await supabase
+            .from('students')
+            .upsert(chunk, { onConflict: 'student_code' });
+            
+          if (studentError) {
+            console.error('Student upsert error:', studentError);
+            throw studentError;
+          }
           
-        if (studentError) {
-          console.error('Student upsert error:', studentError);
-          throw studentError;
+          // Progress from 35% to 65%
+          const progress = 35 + Math.round(((i + chunk.length) / studentsToUpsert.length) * 30);
+          setUploadProgress(progress);
         }
-        console.log('Students upserted successfully');
       }
 
-      // Insert new courses (ignore duplicates by checking existing)
-      console.log('Courses already managed in CoursesTab - no new courses created');
+      setUploadProgress(65);
+      setUploadStatus("جاري رصد الدرجات...");
 
-      console.log('Using course:', selectedCourse.course_name);
+      // Fetch all relevant student IDs map
+      const studentCodes = processedData.map(d => d.student_code);
+      let allStudentsMapData: { id: string; student_code: string }[] = [];
+      
+      // Chunk the student codes to avoid URL too long error (400)
+      const fetchChunkSize = 500;
+      for (let i = 0; i < studentCodes.length; i += fetchChunkSize) {
+        const chunk = studentCodes.slice(i, i + fetchChunkSize);
+        const { data: chunkData, error: mapError } = await supabase
+          .from('students')
+          .select('id, student_code')
+          .in('student_code', chunk);
+          
+        if (mapError) throw mapError;
+        if (chunkData) {
+          allStudentsMapData = [...allStudentsMapData, ...chunkData];
+        }
+      }
+      
+      const studentCodeToId = new Map(allStudentsMapData.map(s => [s.student_code, s.id]));
 
-      // Insert grades (all have grades now, they're mandatory)
       const gradeInserts = [];
       for (const row of processedData) {
-        console.log('Looking up student:', row.student_code);
-        const { data: student, error: studentLookupError } = await supabase.from('students').select('id').eq('student_code', row.student_code).single();
-        if (studentLookupError) {
-          console.error('Student lookup error:', studentLookupError);
-          continue;
-        }
-
-        if (student) {
+        const studentId = studentCodeToId.get(row.student_code);
+        if (studentId) {
           gradeInserts.push({
-            student_id: student.id,
+            student_id: studentId,
             course_id: selectedCourse.id,
             grade: row.grade
           });
         }
       }
 
-      console.log('Grade inserts:', gradeInserts);
-
       if (gradeInserts.length > 0) {
-        const { error: gradeError } = await supabase.from('grades').upsert(gradeInserts, { onConflict: 'student_id,course_id' });
-        if (gradeError) {
-          console.error('Grade insert error:', gradeError);
-          throw gradeError;
+        // Split into chunks
+        const chunkSize = 100;
+        for (let i = 0; i < gradeInserts.length; i += chunkSize) {
+           const chunk = gradeInserts.slice(i, i + chunkSize);
+           const { error: gradeError } = await supabase.from('grades').upsert(chunk, { onConflict: 'student_id,course_id' });
+           if (gradeError) {
+             console.error('Grade insert error:', gradeError);
+             throw gradeError;
+           }
+           
+           // Progress from 65% to 95%
+           const progress = 65 + Math.round(((i + chunk.length) / gradeInserts.length) * 30);
+           setUploadProgress(progress);
         }
-        console.log('Grades inserted successfully');
       }
 
-      console.log('Summary:');
-      console.log('- Processed rows:', processedData.length);
-      console.log('- Students upserted:', studentsToUpsert.length);
-      console.log('- Grades inserted/updated:', gradeInserts.length);
+      setUploadProgress(98);
+      setUploadStatus("جاري حفظ السجلات...");
 
       // Log action
       await logAdminAction(session.adminCode, "bulk_upload", "upsert", {
@@ -388,15 +420,24 @@ const BulkUploadTab = () => {
         grades_inserted: gradeInserts.length
       });
 
+      setUploadProgress(100);
+      setUploadStatus("تمت العملية بنجاح!");
+      
+      // Small delay to show 100%
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       toast({
         title: "نجح الرفع",
         description: `تم معالجة ${processedData.length} سجل (تحديث/إضافة ${studentsToUpsert.length} طالب, ${gradeInserts.length} درجة) للمادة: ${selectedCourse.course_name}`,
       });
 
       // Invalidate queries to refresh data in other tabs
-      queryClient.invalidateQueries({ queryKey: ["students"] });
-      queryClient.invalidateQueries({ queryKey: ["students_list"] });
-      queryClient.invalidateQueries({ queryKey: ["grades"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["students"] }),
+        queryClient.invalidateQueries({ queryKey: ["students_list"] }),
+        queryClient.invalidateQueries({ queryKey: ["courses_list"] }),
+        queryClient.invalidateQueries({ queryKey: ["grades"] })
+      ]);
 
       setFile(null);
       setPreview([]);
@@ -456,7 +497,7 @@ const BulkUploadTab = () => {
       });
 
       // Invalidate queries to refresh data in other tabs
-      queryClient.invalidateQueries({ queryKey: ["grades"] });
+      await queryClient.invalidateQueries({ queryKey: ["grades"] });
     } catch (error: unknown) {
       console.error('Delete error:', error);
       const message = error instanceof Error ? error.message : "حدث خطأ غير معروف";
@@ -504,10 +545,12 @@ const BulkUploadTab = () => {
       }
 
       // Invalidate all queries to refresh data in other tabs
-      queryClient.invalidateQueries({ queryKey: ["students"] });
-      queryClient.invalidateQueries({ queryKey: ["students_list"] });
-      queryClient.invalidateQueries({ queryKey: ["courses_list"] });
-      queryClient.invalidateQueries({ queryKey: ["grades"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["students"] }),
+        queryClient.invalidateQueries({ queryKey: ["students_list"] }),
+        queryClient.invalidateQueries({ queryKey: ["courses_list"] }),
+        queryClient.invalidateQueries({ queryKey: ["grades"] })
+      ]);
 
       toast({
         title: "تم الحذف",
@@ -524,13 +567,142 @@ const BulkUploadTab = () => {
     }
   };
 
+  const handleExportData = async () => {
+    try {
+      setLoading(true);
+      const session = getAdminSession();
+      if (!session) {
+        toast({
+          title: "خطأ",
+          description: "جلسة العمل انتهت، يرجى تسجيل الدخول مرة أخرى",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Fetch all data joined
+      const { data, error } = await supabase
+        .from('grades')
+        .select(`
+          grade,
+          status,
+          students (student_code, student_name, national_id, status),
+          courses (course_name)
+        `);
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        toast({
+          title: "تنبيه",
+          description: "لا توجد بيانات لتصديرها",
+        });
+        return;
+      }
+
+      // Convert to CSV
+            const headers = ["Code", "Name", "National ID", "Course", "Grade", "Student Status", "Course Status"];
+            const csvRows = [headers.join(",")];
+      
+            // Define a proper type for the rows returned by Supabase to avoid `any`
+            type ExportRow = {
+              grade?: number | string | null;
+              status?: string | null;
+              students?: {
+                student_code?: string | null;
+                student_name?: string | null;
+                national_id?: string | null;
+                status?: string | null;
+              } | null;
+              courses?: {
+                course_name?: string | null;
+              } | null;
+            };
+      
+            const rows = data as ExportRow[];
+      
+            rows.forEach((row) => {
+              const values = [
+                row.students?.student_code || "",
+                `"${row.students?.student_name || ""}"`, // Quote name to handle commas
+                row.students?.national_id || "",
+                `"${row.courses?.course_name || ""}"`,
+                row.grade ?? "",
+                row.students?.status || "",
+                row.status || ""
+              ];
+              csvRows.push(values.join(","));
+            });
+
+      const csvContent = "\uFEFF" + csvRows.join("\n"); // Add BOM for Excel UTF-8 support
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `grades_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      await logAdminAction(session.adminCode, "system", "export_data", { count: data.length });
+
+      toast({
+        title: "تم التصدير",
+        description: "تم تحميل ملف البيانات بنجاح",
+      });
+
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "خطأ",
+        description: "فشل تصدير البيانات",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const totalPages = Math.ceil(preview.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentData = preview.slice(startIndex, endIndex);
 
   return (
-    <Card className="p-6 bg-card/95 backdrop-blur-sm border-border shadow-[var(--shadow-glow)]">
+    <>
+      {loading && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <Card className="w-full max-w-md p-8 shadow-2xl border-primary/20 bg-card/95">
+            <div className="flex flex-col items-center space-y-6">
+              <div className="relative flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full blur-xl bg-primary/20 animate-pulse" />
+                <div className="relative bg-background rounded-full p-4 shadow-lg border border-border">
+                  {uploadProgress === 100 ? (
+                    <CheckCircle2 className="h-12 w-12 text-green-500 animate-in zoom-in duration-300" />
+                  ) : (
+                    <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                  )}
+                </div>
+              </div>
+              
+              <div className="space-y-2 text-center w-full">
+                <h3 className="text-xl font-bold tracking-tight">{uploadStatus}</h3>
+                <div className="flex justify-between text-xs text-muted-foreground px-1">
+                  <span>التقدم</span>
+                  <span>{Math.round(uploadProgress)}%</span>
+                </div>
+                <Progress value={uploadProgress} className="h-3 w-full transition-all duration-500" />
+              </div>
+
+              <p className="text-sm text-muted-foreground text-center max-w-[80%] leading-relaxed">
+                جاري معالجة البيانات ورفعها إلى قاعدة البيانات. الرجاء عدم إغلاق الصفحة.
+              </p>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      <Card className="p-6 bg-card/95 backdrop-blur-sm border-border shadow-[var(--shadow-glow)]">
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-2">رفع البيانات بالجملة</h2>
@@ -691,8 +863,31 @@ const BulkUploadTab = () => {
             disabled={!file || loading}
             className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
           >
-            {loading ? "جاري الرفع..." : "رفع البيانات"}
+            {loading ? "جاري الرفع..." : "رفع البيانات"} <Upload className="w-4 h-4 ml-2" />
           </Button>
+        </div>
+
+        <div className="border-t border-border pt-6 space-y-4">
+          <h3 className="text-lg font-semibold text-primary flex items-center gap-2">
+            <Download className="w-5 h-5" />
+          تصدير البيانات
+          </h3>
+          
+          <div className="p-4 border border-primary/20 rounded-lg bg-primary/5 space-y-3">
+            <h4 className="font-medium text-foreground">تحميل نسخة من البيانات</h4>
+            <p className="text-sm text-muted-foreground">
+              يمكنك تحميل ملف CSV يحتوي على جميع الدرجات والطلاب الحاليين للمقارنة أو النسخ الاحتياطي.
+            </p>
+            <Button 
+              onClick={handleExportData} 
+              disabled={loading}
+              variant="outline" 
+              className="w-full border-primary/50 text-primary hover:bg-primary/10"
+            >
+            تحميل البيانات
+            <Download className="w-4 h-4 ml-2" />
+            </Button>
+          </div>
         </div>
 
         <div className="border-t border-border pt-6 space-y-4">
@@ -760,6 +955,7 @@ const BulkUploadTab = () => {
         </div>
       </div>
     </Card>
+    </>
   );
 };
 

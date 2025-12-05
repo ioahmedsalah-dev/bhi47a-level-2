@@ -121,7 +121,10 @@ export const StudentsTab = () => {
         status: newStudent.status
       });
 
-      toast({ title: "نجح", description: "تم إضافة الطالب بنجاح" });
+      toast({ 
+        title: "نجح", 
+        description: `تم إضافة الطالب "${sanitizedName}" (${sanitizedCode}) بنجاح`
+      });
       setNewStudent({ code: "", name: "", nationalId: "", status: "active" });
       setDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["students"] });

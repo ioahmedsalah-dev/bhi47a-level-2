@@ -105,19 +105,19 @@ const AdminDashboard = () => {
           
           <div className="mt-6">
             <Suspense fallback={<TabLoading />}>
-              <TabsContent value="students" className="data-[state=inactive]:hidden">
+              <TabsContent value="students" forceMount={true} className="data-[state=inactive]:hidden">
                 <StudentsTab />
               </TabsContent>
               
-              <TabsContent value="courses" className="data-[state=inactive]:hidden">
+              <TabsContent value="courses" forceMount={true} className="data-[state=inactive]:hidden">
                 <CoursesTab />
               </TabsContent>
               
-              <TabsContent value="grades" className="data-[state=inactive]:hidden">
+              <TabsContent value="grades" forceMount={true} className="data-[state=inactive]:hidden">
                 <GradesTab />
               </TabsContent>
               
-              <TabsContent value="upload" className="data-[state=inactive]:hidden">
+              <TabsContent value="upload" forceMount={true} className="data-[state=inactive]:hidden">
                 <BulkUploadTab />
               </TabsContent>
             </Suspense>

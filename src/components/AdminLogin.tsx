@@ -203,6 +203,7 @@ export const AdminLogin = () => {
             <div>
               <Input
                 type="text"
+                autoComplete="username"
                 placeholder="كود المدير"
                 value={adminCode}
                 onChange={(e) => {
@@ -221,6 +222,7 @@ export const AdminLogin = () => {
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
                   placeholder="كلمة المرور"
                   value={password}
                   maxLength={20}

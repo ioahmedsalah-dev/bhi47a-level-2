@@ -93,7 +93,7 @@ export const CoursesTab = () => {
         course_name: trimmedName
       });
 
-      toast({ title: "نجح", description: "تم إضافة المادة بنجاح" });
+      toast({ title: "نجح", description: `تم إضافة مادة "${trimmedName}" بنجاح` });
       setNewCourseName("");
       setDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["courses_list"] });

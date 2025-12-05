@@ -11,11 +11,13 @@ import { LogOut } from "lucide-react";
 interface CourseGrade {
   courseName: string;
   grade: number;
+  status: string;
 }
 
 interface GradeItem {
   courses: { course_name: string };
   grade: number;
+  status: string;
 }
 
 export const StudentGradesDisplay = () => {
@@ -44,6 +46,7 @@ export const StudentGradesDisplay = () => {
         .from("grades")
         .select(`
           grade,
+          status,
           courses (
             course_name
           )
@@ -52,9 +55,13 @@ export const StudentGradesDisplay = () => {
 
       if (error) throw error;
 
-      const formattedGrades: CourseGrade[] = data.map((item: GradeItem) => ({
-        courseName: item.courses.course_name,
-        grade: item.grade,
+      // supabase may return unknown-typed data; assert to the expected shape and guard for null
+      const rows = data as unknown as GradeItem[] | null;
+
+      const formattedGrades: CourseGrade[] = (rows || []).map((item: GradeItem) => ({
+        courseName: item?.courses?.course_name ?? "—",
+        grade: Number(item?.grade ?? 0),
+        status: item?.status ?? "",
       }));
 
       setGrades(formattedGrades);
@@ -90,7 +97,10 @@ export const StudentGradesDisplay = () => {
     navigate("/student/login");
   };
 
-  const totalGrades = grades.reduce((sum, item) => sum + item.grade, 0);
+  const totalGrades = grades.reduce((sum, item) => {
+    if (item.status === 'banned' || item.status === 'absent') return sum;
+    return sum + item.grade;
+  }, 0);
   const maxTotal = grades.length * 30;
 
   return (
@@ -191,12 +201,12 @@ export const StudentGradesDisplay = () => {
                         <TableCell className="text-foreground font-medium">{item.courseName}</TableCell>
                         <TableCell 
                           className={`text-lg font-bold ${
-                            item.grade < 15 
+                            item.status === 'banned' || item.status === 'absent' || item.grade < 15 
                               ? 'text-destructive' 
                               : 'text-primary'
                           }`}
                         >
-                          {item.grade}
+                          {item.status === 'banned' ? 'محروم' : item.status === 'absent' ? 'غائب' : item.grade}
                         </TableCell>
                       </TableRow>
                     ))}

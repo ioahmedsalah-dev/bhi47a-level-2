@@ -16,6 +16,7 @@ import { sanitizeInput, validateGrade, logAdminAction, getAdminSession } from "@
 interface Grade {
   id: string;
   grade: number;
+  status: string;
   students: { student_name: string; student_code: string };
   courses: { course_name: string };
   student_id: string;
@@ -35,9 +36,11 @@ interface Course {
 
 export const GradesTab = () => {
   const [editingGrade, setEditingGrade] = useState<Grade | null>(null);
-  const [newGrade, setNewGrade] = useState({ studentId: "", courseId: "", grade: "" });
+  const [newGrade, setNewGrade] = useState({ studentId: "", courseId: "", grade: "", status: "present" });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [searchCode, setSearchCode] = useState("");
+  const [sortBy, setSortBy] = useState<"created_at" | "grade" | "student_code">("student_code");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const { toast } = useToast();
@@ -66,8 +69,8 @@ export const GradesTab = () => {
   });
 
   // 3. Grades Query (Paginated)
-  const { data: gradesData, isLoading } = useQuery({
-    queryKey: ["grades", currentPage, searchCode],
+  const { data: gradesData, isLoading } = useQuery<{ grades: Grade[]; count: number }>({
+    queryKey: ["grades", currentPage, searchCode, sortBy, sortOrder],
     queryFn: async () => {
       let query = supabase
         .from("grades")
@@ -75,9 +78,17 @@ export const GradesTab = () => {
           *,
           students!inner (student_name, student_code),
           courses (course_name)
-        `, { count: "exact" })
-        .order("created_at", { ascending: false })
-        .range((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage - 1);
+        `, { count: "exact" });
+
+      // Apply sorting
+      if (sortBy === 'student_code') {
+        query = query.order('student_code', { foreignTable: 'students', ascending: sortOrder === 'asc' });
+      } else {
+        query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+      }
+
+      // Apply pagination
+      query = query.range((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage - 1);
 
       if (searchCode) {
         query = query.ilike("students.student_code", `%${searchCode}%`);
@@ -85,7 +96,7 @@ export const GradesTab = () => {
 
       const { data, error, count } = await query;
       if (error) throw error;
-      return { grades: data, count };
+      return { grades: data as unknown as Grade[], count: count ?? 0 };
     },
     placeholderData: keepPreviousData,
   });
@@ -129,7 +140,8 @@ export const GradesTab = () => {
       const { error } = await supabase.from("grades").insert([{
         student_id: newGrade.studentId,
         course_id: newGrade.courseId,
-        grade: gradeNum
+        grade: gradeNum,
+        status: newGrade.status
       }]);
 
       if (error) throw error;
@@ -139,10 +151,11 @@ export const GradesTab = () => {
         student_id: newGrade.studentId,
         course_id: newGrade.courseId,
         grade: gradeNum,
+        status: newGrade.status
       });
 
       toast({ title: "نجح", description: "تم إضافة الدرجة بنجاح" });
-      setNewGrade({ studentId: "", courseId: "", grade: "" });
+      setNewGrade({ studentId: "", courseId: "", grade: "", status: "present" });
       setDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["grades"] });
     } catch (error) {
@@ -184,7 +197,7 @@ export const GradesTab = () => {
     try {
       const { error } = await supabase
         .from("grades")
-        .update({ grade: gradeNum })
+        .update({ grade: gradeNum, status: editingGrade.status })
         .eq("id", editingGrade.id);
 
       if (error) throw error;
@@ -193,6 +206,7 @@ export const GradesTab = () => {
       await logAdminAction(session.adminCode, "grades", "update", {
         grade_id: editingGrade.id,
         new_grade: gradeNum,
+        new_status: editingGrade.status
       });
 
       toast({ title: "نجح", description: "تم تحديث الدرجة بنجاح" });
@@ -265,7 +279,7 @@ export const GradesTab = () => {
             <Button
               onClick={() => {
                 setEditingGrade(null);
-                setNewGrade({ studentId: "", courseId: "", grade: "" });
+                setNewGrade({ studentId: "", courseId: "", grade: "", status: "present" });
               }}
               className="gap-2 bg-primary hover:bg-primary/90"
             >
@@ -330,6 +344,27 @@ export const GradesTab = () => {
                 }}
                 className="text-right bg-secondary/50 border-border"
               />
+              
+              <Select 
+                value={editingGrade ? editingGrade.status : newGrade.status} 
+                onValueChange={(v) => {
+                  if (editingGrade) {
+                    setEditingGrade({ ...editingGrade, status: v });
+                  } else {
+                    setNewGrade({ ...newGrade, status: v });
+                  }
+                }}
+              >
+                <SelectTrigger className="text-right bg-secondary/50 border-border" dir="rtl">
+                  <SelectValue placeholder="حالة الطالب في المادة" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="present">حاضر</SelectItem>
+                  <SelectItem value="absent">غائب</SelectItem>
+                  <SelectItem value="banned">محروم</SelectItem>
+                </SelectContent>
+              </Select>
+
               <Button
                 onClick={editingGrade ? handleUpdateGrade : handleAddGrade}
                 className="w-full bg-primary hover:bg-primary/90"
@@ -372,6 +407,7 @@ export const GradesTab = () => {
               <TableHead className="text-right text-foreground">الطالب</TableHead>
               <TableHead className="text-right text-foreground">المادة</TableHead>
               <TableHead className="text-right text-foreground">الدرجة</TableHead>
+              <TableHead className="text-right text-foreground">الحالة</TableHead>
               <TableHead className="text-right text-foreground">الإجراءات</TableHead>
             </TableRow>
           </TableHeader>
@@ -388,6 +424,23 @@ export const GradesTab = () => {
                   <TableCell className="text-foreground">{grade.courses.course_name}</TableCell>
                   <TableCell className={`font-bold ${grade.grade < 15 ? 'text-destructive' : 'text-primary'}`}>
                     {grade.grade}
+                  </TableCell>
+                  <TableCell>
+                    {grade.status === 'present' ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-500/20 text-green-400">
+                        حاضر
+                      </span>
+                    ) : grade.status === 'absent' ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-destructive/20 text-destructive">
+                        غائب
+                      </span>
+                    ) : grade.status === 'banned' ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-destructive/20 text-destructive">
+                        محروم
+                      </span>
+                    ) : (
+                      <span className="text-foreground text-xs">{grade.status}</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
