@@ -72,14 +72,25 @@ const AdminDashboard = () => {
               </div>
             </div>
 
-            <Button
-              variant="destructive"
-              onClick={handleLogout}
-              className="w-full md:w-auto min-w-[140px] gap-2 shadow-lg"
-            >
-              <LogOut className="w-4 h-4" />
-              تسجيل الخروج
-            </Button>
+            <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+              <Button
+                variant="outline"
+                onClick={() => window.open("/student/login", "_blank")}
+                className="w-full md:w-auto min-w-[140px] gap-2 shadow-lg border-primary/20 hover:bg-primary/10"
+              >
+                بوابة الطلاب
+                <Users className="w-4 h-4" />
+              </Button>
+
+              <Button
+                variant="destructive"
+                onClick={handleLogout}
+                className="w-full md:w-auto min-w-[140px] gap-2 shadow-lg"
+              >
+                تسجيل الخروج
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
