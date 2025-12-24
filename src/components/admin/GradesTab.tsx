@@ -39,6 +39,8 @@ export const GradesTab = () => {
   const [newGrade, setNewGrade] = useState({ studentId: "", courseId: "", grade: "", status: "present" });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [searchCode, setSearchCode] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [courseFilter, setCourseFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"created_at" | "grade" | "student_code">("student_code");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [currentPage, setCurrentPage] = useState(1);
@@ -70,15 +72,24 @@ export const GradesTab = () => {
 
   // 3. Grades Query (Paginated)
   const { data: gradesData, isLoading } = useQuery<{ grades: Grade[]; count: number }>({
-    queryKey: ["grades", currentPage, searchCode, sortBy, sortOrder],
+    queryKey: ["grades", currentPage, searchCode, sortBy, sortOrder, statusFilter, courseFilter],
     queryFn: async () => {
-      let query = supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let query: any = supabase
         .from("grades")
         .select(`
           *,
           students!inner (student_name, student_code),
           courses (course_name)
         `, { count: "exact" });
+
+      // Apply filters
+      if (statusFilter && statusFilter !== "all") {
+        query = query.eq("status", statusFilter);
+      }
+      if (courseFilter && courseFilter !== "all") {
+        query = query.eq("course_id", courseFilter);
+      }
 
       // Apply sorting
       if (sortBy === 'student_code') {
@@ -376,28 +387,57 @@ export const GradesTab = () => {
         </Dialog>
       </div>
 
-      <div className="flex gap-2">
-        <Input
-          placeholder="ابحث برقم الطالب..."
-          value={searchCode}
-          maxLength={6}
-          onChange={(e) => {
-            const val = e.target.value;
-            if (/^\d*$/.test(val)) {
-              setSearchCode(val);
-            }
-          }}
-          className="flex-1 bg-secondary/50 border-border"
-        />
-        {searchCode && (
-          <Button
-            variant="outline"
-            onClick={() => setSearchCode("")}
-            className="border-border"
-          >
-            مسح
-          </Button>
-        )}
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex-1 flex gap-2">
+          <Input
+            placeholder="ابحث برقم الطالب..."
+            value={searchCode}
+            maxLength={6}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (/^\d*$/.test(val)) {
+                setSearchCode(val);
+              }
+            }}
+            className="flex-1 bg-secondary/50 border-border"
+          />
+          {searchCode && (
+            <Button
+              variant="outline"
+              onClick={() => setSearchCode("")}
+              className="border-border"
+            >
+              مسح
+            </Button>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Select value={courseFilter} onValueChange={setCourseFilter}>
+            <SelectTrigger className="w-[180px] bg-secondary/50 border-border text-right" dir="rtl">
+              <SelectValue placeholder="تصفية حسب المادة" />
+            </SelectTrigger>
+            <SelectContent className="bg-card border-border" dir="rtl">
+              <SelectItem value="all">جميع المواد</SelectItem>
+              {courses.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.course_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[180px] bg-secondary/50 border-border text-right" dir="rtl">
+              <SelectValue placeholder="تصفية حسب الحالة" />
+            </SelectTrigger>
+            <SelectContent className="bg-card border-border" dir="rtl">
+              <SelectItem value="all">جميع الحالات</SelectItem>
+              <SelectItem value="present">حاضر</SelectItem>
+              <SelectItem value="absent">غائب</SelectItem>
+              <SelectItem value="banned">محروم</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card className="bg-card/95 backdrop-blur-sm border-border">

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { getAdminSession, logAdminAction } from "@/integrations/supabase/auth";
 import { useToast } from "@/hooks/use-toast";
@@ -14,11 +15,13 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 interface Course {
   id: string;
   course_name: string;
+  level: number | null;
 }
 
 export const CoursesTab = () => {
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [newCourseName, setNewCourseName] = useState("");
+  const [newCourseLevel, setNewCourseLevel] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -32,7 +35,7 @@ export const CoursesTab = () => {
         .order("course_name");
 
       if (error) throw error;
-      return data as Course[];
+      return (data as unknown) as Course[];
     },
   });
 
@@ -66,6 +69,15 @@ export const CoursesTab = () => {
       return;
     }
 
+    if (!newCourseLevel) {
+      toast({
+        title: "خطأ",
+        description: "الرجاء اختيار المستوى",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Check for duplicate course names
     const trimmedName = newCourseName.trim();
     const existingCourse = courses.find(course => 
@@ -84,17 +96,19 @@ export const CoursesTab = () => {
     try {
       const { error } = await supabase
         .from("courses")
-        .insert([{ course_name: trimmedName }]);
+        .insert([{ course_name: trimmedName, level: parseInt(newCourseLevel) }]);
 
       if (error) throw error;
 
       // Log action
       await logAdminAction(session.adminCode, "courses", "insert", {
-        course_name: trimmedName
+        course_name: trimmedName,
+        level: parseInt(newCourseLevel)
       });
 
       toast({ title: "نجح", description: `تم إضافة مادة "${trimmedName}" بنجاح` });
       setNewCourseName("");
+      setNewCourseLevel("");
       setDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["courses_list"] });
     } catch (error) {
@@ -139,6 +153,15 @@ export const CoursesTab = () => {
       return;
     }
 
+    if (!editingCourse.level) {
+      toast({
+        title: "خطأ",
+        description: "الرجاء اختيار المستوى",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Check for duplicate course names (excluding the current course being edited)
     const existingCourse = courses.find(course => 
       course.id !== editingCourse.id && 
@@ -157,7 +180,7 @@ export const CoursesTab = () => {
     try {
       const { error } = await supabase
         .from("courses")
-        .update({ course_name: trimmedName })
+        .update({ course_name: trimmedName, level: editingCourse.level })
         .eq("id", editingCourse.id);
 
       if (error) throw error;
@@ -165,7 +188,8 @@ export const CoursesTab = () => {
       // Log action
       await logAdminAction(session.adminCode, "courses", "update", {
         id: editingCourse.id,
-        course_name: trimmedName
+        course_name: trimmedName,
+        level: editingCourse.level
       });
 
       toast({ title: "نجح", description: "تم تحديث المادة بنجاح" });
@@ -242,6 +266,7 @@ export const CoursesTab = () => {
               onClick={() => {
                 setEditingCourse(null);
                 setNewCourseName("");
+                setNewCourseLevel("");
               }}
               className="gap-2 bg-primary hover:bg-primary/90"
             >
@@ -270,6 +295,28 @@ export const CoursesTab = () => {
                   className="text-right bg-secondary/50 border-border"
                 />
               </div>
+              <div>
+                <Select
+                  value={editingCourse ? editingCourse.level?.toString() : newCourseLevel}
+                  onValueChange={(value) => {
+                    if (editingCourse) {
+                      setEditingCourse({ ...editingCourse, level: parseInt(value) });
+                    } else {
+                      setNewCourseLevel(value);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full text-right bg-secondary/50 border-border" dir="rtl">
+                    <SelectValue placeholder="اختر المستوى" />
+                  </SelectTrigger>
+                  <SelectContent dir="rtl">
+                    <SelectItem value="1">المستوى الأول</SelectItem>
+                    <SelectItem value="2">المستوى الثاني</SelectItem>
+                    <SelectItem value="3">المستوى الثالث</SelectItem>
+                    <SelectItem value="4">المستوى الرابع</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 onClick={editingCourse ? handleUpdateCourse : handleAddCourse}
                 className="w-full bg-primary hover:bg-primary/90"
@@ -287,6 +334,7 @@ export const CoursesTab = () => {
           <TableHeader>
             <TableRow className="border-border">
               <TableHead className="text-right text-foreground">اسم المادة</TableHead>
+              <TableHead className="text-right text-foreground">المستوى</TableHead>
               <TableHead className="text-right text-foreground">الإجراءات</TableHead>
             </TableRow>
           </TableHeader>
@@ -294,6 +342,7 @@ export const CoursesTab = () => {
             {courses.map((course) => (
               <TableRow key={course.id} className="border-border">
                 <TableCell className="text-foreground">{course.course_name}</TableCell>
+                <TableCell className="text-foreground">{course.level ? `المستوى ${course.level}` : "-"}</TableCell>
                 <TableCell>
                   <div className="flex gap-2">
                     <Button
@@ -348,6 +397,7 @@ export const CoursesTab = () => {
           <Card key={course.id} className="p-4 bg-card/95 backdrop-blur-sm border-border flex flex-col gap-4">
             <div className="flex justify-between items-center">
               <span className="font-bold text-foreground text-lg">{course.course_name}</span>
+              <span className="text-sm text-muted-foreground">{course.level ? `المستوى ${course.level}` : "-"}</span>
             </div>
             <div className="flex gap-2 justify-end border-t border-border/50 pt-3">
               <Button

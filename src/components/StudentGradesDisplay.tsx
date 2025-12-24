@@ -12,10 +12,14 @@ interface CourseGrade {
   courseName: string;
   grade: number;
   status: string;
+  level: number | null;
 }
 
 interface GradeItem {
-  courses: { course_name: string };
+  courses: { 
+    course_name: string;
+    level: number | null;
+  };
   grade: number;
   status: string;
 }
@@ -48,7 +52,8 @@ export const StudentGradesDisplay = () => {
           grade,
           status,
           courses (
-            course_name
+            course_name,
+            level
           )
         `)
         .eq("student_id", studentId);
@@ -62,6 +67,7 @@ export const StudentGradesDisplay = () => {
         courseName: item?.courses?.course_name ?? "—",
         grade: Number(item?.grade ?? 0),
         status: item?.status ?? "",
+        level: item?.courses?.level ?? null,
       }));
 
       setGrades(formattedGrades);
@@ -198,7 +204,10 @@ export const StudentGradesDisplay = () => {
                         }`}
                       >
                         <TableCell className="text-foreground">{index + 1}</TableCell>
-                        <TableCell className="text-foreground font-medium">{item.courseName}</TableCell>
+                        <TableCell className="text-foreground font-medium">
+                          {item.courseName}
+                          {item.level && <span className="text-xs text-muted-foreground mr-2">({`المستوى ${item.level}`})</span>}
+                        </TableCell>
                         <TableCell 
                           className={`text-lg font-bold ${
                             item.status === 'banned' || item.status === 'absent' || item.grade < 15 
